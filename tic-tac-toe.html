@@ -1,0 +1,443 @@
+<title>三子輪替井字棋</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+  :root {
+    --paper: #eef1f4;
+    --panel: #ffffff;
+    --grid: #d7dde5;
+    --ink: #17202b;
+    --muted: #5d6877;
+    --line: #17202b;
+    --o: #2456e0;
+    --x: #e23d2f;
+    --o-soft: rgba(36, 86, 224, .12);
+    --x-soft: rgba(226, 61, 47, .12);
+    --win: #f2c230;
+    --display: "Bricolage Grotesque", "Noto Sans TC", system-ui, sans-serif;
+    --body: "Noto Sans TC", system-ui, -apple-system, "Microsoft JhengHei", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #11161d;
+      --panel: #19202a;
+      --grid: #232c38;
+      --ink: #e9eef4;
+      --muted: #97a3b3;
+      --line: #e9eef4;
+      --o: #6b93ff;
+      --x: #ff6b5c;
+      --o-soft: rgba(107, 147, 255, .16);
+      --x-soft: rgba(255, 107, 92, .16);
+      --win: #e8b923;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #11161d;
+    --panel: #19202a;
+    --grid: #232c38;
+    --ink: #e9eef4;
+    --muted: #97a3b3;
+    --line: #e9eef4;
+    --o: #6b93ff;
+    --x: #ff6b5c;
+    --o-soft: rgba(107, 147, 255, .16);
+    --x-soft: rgba(255, 107, 92, .16);
+    --win: #e8b923;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 24px 24px;
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.6;
+    padding: 0 16px;
+    padding-block: 32px 48px;
+  }
+  .wrap {
+    max-width: 460px;
+    margin: 0 auto;
+    display: grid;
+    gap: 20px;
+  }
+
+  header h1 {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: clamp(30px, 8vw, 40px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  header h1 .o { color: var(--o); }
+  header h1 .x { color: var(--x); }
+  header p { margin: 0; color: var(--muted); max-width: 40ch; }
+
+  /* 計分與回合 */
+  .players {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .player {
+    background: var(--panel);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    padding: 10px 14px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    transition: border-color .2s, transform .2s;
+  }
+  .player .mark { font-family: var(--display); font-weight: 800; font-size: 26px; line-height: 1; }
+  .player[data-p="O"] .mark { color: var(--o); }
+  .player[data-p="X"] .mark { color: var(--x); }
+  .player .name { font-size: 13px; color: var(--muted); }
+  .player .score { font-family: var(--mono); font-size: 22px; font-variant-numeric: tabular-nums; }
+  .player.active[data-p="O"] { border-color: var(--o); background: linear-gradient(var(--o-soft), var(--o-soft)), var(--panel); }
+  .player.active[data-p="X"] { border-color: var(--x); background: linear-gradient(var(--x-soft), var(--x-soft)), var(--panel); }
+
+  .status {
+    font-weight: 500;
+    min-height: 1.6em;
+    text-align: center;
+  }
+  .status b.o { color: var(--o); }
+  .status b.x { color: var(--x); }
+
+  /* 棋盤 */
+  .board {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    aspect-ratio: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    background: var(--panel);
+    border-radius: 14px;
+    padding: 10px;
+    box-shadow: 0 1px 0 var(--grid), 0 12px 32px -18px rgba(0,0,0,.35);
+  }
+  .cell {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    position: relative;
+    display: grid;
+    place-items: center;
+    color: inherit;
+    border-radius: 6px;
+  }
+  .cell:nth-child(-n+6) { border-bottom: 3px solid var(--line); border-radius: 0; }
+  .cell:not(:nth-child(3n)) { border-right: 3px solid var(--line); border-radius: 0; }
+  .cell:focus-visible { outline: 3px solid var(--win); outline-offset: -6px; }
+  .cell:disabled { cursor: default; }
+  .cell:not(:disabled):hover .ghost { opacity: .22; }
+
+  .cell svg { width: 64%; height: 64%; overflow: visible; }
+  .cell svg path, .cell svg circle { fill: none; stroke-width: 11; stroke-linecap: round; }
+  .piece-o circle { stroke: var(--o); }
+  .piece-x path { stroke: var(--x); }
+  .ghost { opacity: 0; transition: opacity .15s; }
+
+  .piece { animation: draw .32s ease-out both; }
+  .piece-o circle { stroke-dasharray: 240; }
+  .piece-x path { stroke-dasharray: 100; }
+  @keyframes draw {
+    from { stroke-dashoffset: 240; opacity: .3; }
+    to { stroke-dashoffset: 0; opacity: 1; }
+  }
+
+  /* 下一步會消失的棋子 */
+  .cell.doomed .piece { opacity: .35; animation: blink 1.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: .15; } }
+
+  .cell.vanish .piece { animation: vanish .35s ease-in forwards; }
+  @keyframes vanish { to { opacity: 0; transform: scale(.4); } }
+
+  .cell.win { background: color-mix(in srgb, var(--win) 28%, transparent); }
+
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  button.btn {
+    font: 500 14px var(--body);
+    padding: 9px 18px;
+    border-radius: 999px;
+    border: 2px solid var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+    cursor: pointer;
+  }
+  button.btn.ghost-btn { background: transparent; color: var(--ink); }
+  button.btn:focus-visible { outline: 3px solid var(--win); outline-offset: 2px; }
+  label.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); cursor: pointer; }
+
+  .rules {
+    background: var(--panel);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .rules h2 {
+    font-size: 12px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    margin: 0 0 6px;
+    color: var(--ink);
+    font-family: var(--mono);
+  }
+  .rules ul { margin: 0; padding-left: 1.2em; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .piece, .cell.doomed .piece, .cell.vanish .piece { animation: none; }
+    .cell.doomed .piece { opacity: .35; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1><span class="o">○</span> 三子輪替 <span class="x">✕</span></h1>
+    <p>每人場上最多三顆棋子。下第四顆時，你最早下的那顆會消失。</p>
+  </header>
+
+  <section class="players" aria-label="玩家">
+    <div class="player" data-p="O">
+      <span class="mark">○</span>
+      <div>
+        <div class="name">圈圈</div>
+      </div>
+      <span class="score" id="score-O">0</span>
+    </div>
+    <div class="player" data-p="X">
+      <span class="mark">✕</span>
+      <div>
+        <div class="name" id="name-X">叉叉</div>
+      </div>
+      <span class="score" id="score-X">0</span>
+    </div>
+  </section>
+
+  <div class="status" id="status" aria-live="polite"></div>
+
+  <div class="board" id="board" role="grid" aria-label="棋盤"></div>
+
+  <div class="actions">
+    <button class="btn" id="restart" type="button">再來一局</button>
+    <button class="btn ghost-btn" id="reset-score" type="button">分數歸零</button>
+    <label class="toggle" for="vs-cpu"><input type="checkbox" id="vs-cpu"> 與電腦對戰（電腦為 ✕）</label>
+  </div>
+
+  <aside class="rules">
+    <h2>規則</h2>
+    <ul>
+      <li>第一局由圈圈先手，之後每分出勝負就換另一方先手。雙方輪流下子，連成一線（橫、直、斜）即獲勝。</li>
+      <li>每位玩家場上最多同時存在 <strong>3</strong> 顆棋子。</li>
+      <li>下第 4 顆時，自己最早下的那顆會被移除。即將消失的棋子會閃爍提示。</li>
+      <li>因為棋子會輪替，這個版本不會出現平手。</li>
+    </ul>
+  </aside>
+</div>
+
+<script>
+(() => {
+  const MAX = 3;
+  const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const cpuEl = document.getElementById('vs-cpu');
+
+  let board, queues, turn, winner, winLine, busy;
+  const score = { O: 0, X: 0 };
+  let starter = 'O';
+
+  const svg = {
+    O: '<svg viewBox="0 0 100 100" class="piece piece-o"><circle cx="50" cy="50" r="36"/></svg>',
+    X: '<svg viewBox="0 0 100 100" class="piece piece-x"><path d="M18 18 L82 82"/><path d="M82 18 L18 82"/></svg>',
+  };
+  const ghost = p => svg[p].replace('class="piece', 'class="ghost');
+
+  // 建立九個格子
+  const cells = [];
+  for (let i = 0; i < 9; i++) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cell';
+    b.id = 'cell-' + i;
+    b.setAttribute('role', 'gridcell');
+    b.addEventListener('click', () => onCell(i));
+    boardEl.appendChild(b);
+    cells.push(b);
+  }
+
+  function newGame() {
+    board = Array(9).fill(null);
+    queues = { O: [], X: [] };
+    turn = starter;
+    winner = null;
+    winLine = null;
+    busy = false;
+    render();
+    maybeCpu();
+  }
+
+  function checkWin(p) {
+    return LINES.find(l => l.every(i => board[i] === p)) || null;
+  }
+
+  function place(i) {
+    const p = turn;
+    const q = queues[p];
+    let removed = null;
+    if (q.length === MAX) {
+      removed = q.shift();
+      board[removed] = null;
+    }
+    board[i] = p;
+    q.push(i);
+
+    const line = checkWin(p);
+    if (line) {
+      winner = p;
+      winLine = line;
+      score[p]++;
+      starter = starter === 'O' ? 'X' : 'O'; // 下一局換人先手
+    } else {
+      turn = p === 'O' ? 'X' : 'O';
+    }
+    return removed;
+  }
+
+  function onCell(i) {
+    if (busy || winner || board[i]) return;
+    if (cpuEl.checked && turn === 'X') return;
+    move(i);
+  }
+
+  function move(i) {
+    const removed = place(i);
+    if (removed !== null) {
+      // 先畫出消失動畫，再更新畫面
+      cells[removed].classList.add('vanish');
+    }
+    render(i, removed);
+    maybeCpu();
+  }
+
+  function render(justPlaced, removed) {
+    const doomed = !winner && queues[turn].length === MAX ? queues[turn][0] : null;
+
+    cells.forEach((c, i) => {
+      const p = board[i];
+      const keepVanish = i === removed && !p;
+      c.classList.toggle('win', !!winLine && winLine.includes(i));
+      c.classList.toggle('doomed', i === doomed);
+      if (!keepVanish) c.classList.remove('vanish');
+
+      if (p) {
+        // 只有剛下的棋子重播動畫
+        if (i === justPlaced || !c.dataset.p || c.dataset.p !== p) {
+          c.innerHTML = svg[p];
+        }
+        c.dataset.p = p;
+        c.disabled = true;
+        c.setAttribute('aria-label', `第 ${i + 1} 格：${p === 'O' ? '圈' : '叉'}`);
+      } else {
+        if (keepVanish) {
+          setTimeout(() => {
+            if (!board[i]) { c.classList.remove('vanish'); c.innerHTML = winner ? '' : ghost(turn); delete c.dataset.p; }
+          }, 350);
+        } else {
+          c.innerHTML = winner ? '' : ghost(turn);
+          delete c.dataset.p;
+        }
+        c.disabled = !!winner;
+        c.setAttribute('aria-label', `第 ${i + 1} 格：空`);
+      }
+    });
+
+    document.querySelectorAll('.player').forEach(el => {
+      el.classList.toggle('active', !winner && el.dataset.p === turn);
+    });
+    ['O', 'X'].forEach(p => {
+      document.getElementById('score-' + p).textContent = score[p];
+    });
+    document.getElementById('name-X').textContent = cpuEl.checked ? '叉叉（電腦）' : '叉叉';
+
+    const tag = p => `<b class="${p.toLowerCase()}">${p === 'O' ? '○ 圈圈' : '✕ 叉叉'}</b>`;
+    if (winner) {
+      statusEl.innerHTML = `${tag(winner)} 連成一線，獲勝！`;
+    } else if (doomed !== null) {
+      statusEl.innerHTML = `輪到 ${tag(turn)}，這一步下完後閃爍的那顆會消失`;
+    } else {
+      statusEl.innerHTML = `輪到 ${tag(turn)}`;
+    }
+  }
+
+  // ---- 簡易電腦：能贏就贏、能擋就擋，否則取中心／角落 ----
+  function simulate(p, i) {
+    const b = board.slice();
+    const q = queues[p].slice();
+    if (q.length === MAX) b[q.shift()] = null;
+    b[i] = p;
+    return LINES.some(l => l.every(k => b[k] === p));
+  }
+
+  function cpuPick() {
+    const empty = board.map((v, i) => v ? null : i).filter(v => v !== null);
+    const win = empty.find(i => simulate('X', i));
+    if (win !== undefined) return win;
+    const block = empty.filter(i => simulate('O', i));
+    // 對手下一步能贏的格子，搶先佔住
+    if (block.length) return block[0];
+    const pref = [4, 0, 2, 6, 8, 1, 3, 5, 7].filter(i => empty.includes(i));
+    // 避免讓對手在我們下完後立刻能贏
+    const safe = pref.filter(i => {
+      const saveB = board.slice(), saveQ = { O: queues.O.slice(), X: queues.X.slice() };
+      const q = queues.X;
+      if (q.length === MAX) board[q.shift()] = null;
+      board[i] = 'X'; q.push(i);
+      const oEmpty = board.map((v, k) => v ? null : k).filter(v => v !== null);
+      const danger = oEmpty.some(k => simulate('O', k));
+      board = saveB; queues = saveQ;
+      return !danger;
+    });
+    return (safe.length ? safe : pref)[0];
+  }
+
+  function maybeCpu() {
+    if (!cpuEl.checked || winner || turn !== 'X') return;
+    busy = true;
+    setTimeout(() => {
+      busy = false;
+      if (winner || turn !== 'X' || !cpuEl.checked) return;
+      move(cpuPick());
+    }, 450);
+  }
+
+  document.getElementById('restart').addEventListener('click', newGame);
+  document.getElementById('reset-score').addEventListener('click', () => {
+    score.O = 0; score.X = 0; starter = 'O'; newGame();
+  });
+  cpuEl.addEventListener('change', () => { render(); maybeCpu(); });
+
+  newGame();
+})();
+</script>
